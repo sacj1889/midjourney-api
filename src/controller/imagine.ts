@@ -5,13 +5,15 @@ import { Midjourney } from "../../src";
 import { error } from "console";
 
 export const imagineHandler = async (req: Request, res: Response) => {
-  const { prompt } = req.body;
-  if (!prompt) {
-    return res.status(400).json({ message: "Prompt is required" });
+  const { prompt, output_ratio } = req.body;
+  if (!prompt || !output_ratio) {
+    return res
+      .status(400)
+      .json({ message: "Prompt and output_ratio are required" });
   }
 
   try {
-    const result = await main(prompt);
+    const result = await main(prompt, output_ratio);
     res.status(200).json(result);
   } catch (err) {
     console.error("Error processing the imagine request:", err);
@@ -19,7 +21,7 @@ export const imagineHandler = async (req: Request, res: Response) => {
   }
 };
 
-async function main(prompt: string) {
+async function main(prompt: string, output_ratio: string) {
   const client = new Midjourney({
     ServerId: process.env.SERVER_ID as string,
     ChannelId: process.env.CHANNEL_ID as string,
@@ -31,7 +33,9 @@ async function main(prompt: string) {
 
   await client.Connect();
   try {
-    const imagine = await client.Imagine(prompt);
+    // Concatenate aspect ratio to the prompt
+    const fullPrompt = `${prompt} --ar ${output_ratio}`;
+    const imagine = await client.Imagine(fullPrompt);
     console.log({ Imagine: imagine });
 
     if (!imagine) {
@@ -39,7 +43,22 @@ async function main(prompt: string) {
     }
 
     const url = imagine.uri;
-    const modifiedUrl = `${url}width=2048&height=2048`;
+
+    // Parse the aspect ratio
+    const [widthRatio, heightRatio] = output_ratio.split(":").map(Number);
+    let width: number;
+    let height: number;
+
+    // Calculate dimensions based on the aspect ratio
+     if (widthRatio < heightRatio) {
+       width = 2048;
+       height = Math.floor((2048 * heightRatio) / widthRatio);
+     } else {
+       height = 2048;
+       width = Math.floor((2048 * widthRatio) / heightRatio);
+     }
+
+    const modifiedUrl = `${url}width=${width}&height=${height}`;
 
     return { url, modifiedUrl };
   } finally {
